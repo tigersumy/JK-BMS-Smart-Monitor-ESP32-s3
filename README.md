@@ -1,0 +1,289 @@
+# ⚡ JK-BMS Smart Monitor & BLE-to-Wi-Fi Adapter (ESP32-S3)
+
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-Build%20Passed-orange?logo=platformio)](https://platformio.org/)
+[![Hardware](https://img.shields.io/badge/Hardware-ESP32--S3%20Super%20Mini-blue?logo=espressif)](https://www.espressif.com/)
+[![Protocol](https://img.shields.io/badge/BMS%20Protocol-JK02%20BLE-green)](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3)
+[![Framework](https://img.shields.io/badge/Framework-Arduino%20ESP32-red?logo=arduino)](https://github.com/espressif/arduino-esp32)
+[![Pack Support](https://img.shields.io/badge/Battery%20Packs-4S%20%7C%208S%20%7C%2016S-brightgreen)](#-multi-cell-pack-support-4s--8s--16s)
+[![UI Language](https://img.shields.io/badge/Language-EN%20%7C%20UA-purple)](#-bilingual-user-interface)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> **Autonomous wireless IoT bridge and diagnostic web monitor for JK-BMS (JiKong BMS) battery management systems using the ultra-compact ESP32-S3 Super Mini.**  
+> *Zero hardcoded credentials, Captive Portal initial provisioning, BLE 5.0 continuous stream telemetry, dynamic responsive dark-themed dashboard, multi-cell (4S/8S/16S) support, and complete switch control (Charge MOS, Discharge MOS, Active Balancer).*
+
+---
+
+## 📑 Table of Contents
+
+- [Key Features](#-key-features)
+- [System Architecture](#-system-architecture)
+- [Hardware & Pinout](#-hardware--pinout)
+- [Bilingual Interface (EN / UA)](#-bilingual-user-interface)
+- [Multi-Cell Pack Support (4S / 8S / 16S)](#-multi-cell-pack-support-4s--8s--16s)
+- [REST API Specification](#-rest-api-specification)
+- [Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Flashing via PlatformIO](#flashing-via-platformio)
+  - [Initial Provisioning (Captive Portal)](#step-1-initial-provisioning-captive-portal)
+  - [Normal Operation (LAN Dashboard)](#step-2-normal-operation-lan-dashboard)
+- [Resource & Thermal Optimization](#-resource--thermal-optimization)
+- [Technical Findings & Protocol Gotchas](#-technical-findings--protocol-gotchas)
+- [License](#-license)
+
+---
+
+## 🌟 Key Features
+
+1. **Standalone & Zero Hardcode Configuration:**
+   - No Wi-Fi credentials or BMS MAC addresses are embedded in the code.
+   - On unconfigured first boot (or after Factory Reset), the module starts an open Wi-Fi AP (`JK-BMS-Adapter-Setup`) with automatic DNS Captive Portal redirecting to `http://192.168.4.1/setup`.
+2. **Over-The-Air Radio Scanners:**
+   - Built-in Wi-Fi network scanner with RSSI signal levels.
+   - Built-in Bluetooth Low Energy scanner automatically discovering candidate JK-BMS devices nearby (`service UUID 0xFFE0`).
+3. **High-Precision Telemetry:**
+   - 1 mV individual cell voltage precision.
+   - Automated min/max cell identification and Delta calculation ($\Delta V$).
+   - Battery total voltage, signed current (+ Charge / - Discharge), active power in Watts.
+   - Coulomb-counter capacity remaining (Ah), State of Charge (SOC %), and full charge capacity.
+   - Dual battery temperature probes and MOSFET heat-sink sensor.
+   - Real cycle count counter and cumulative cycled throughput (Ah).
+4. **Interactive Protection Control:**
+   - Direct toggling of **Charge MOS**, **Discharge MOS**, and **Active Balancer** via JK02 holding register commands directly from the browser.
+5. **Adaptive Multi-Cell Support (4S / 8S / 16S):**
+   - Seamlessly monitor 12V (4S), 24V (8S), or 48V (16S) battery packs.
+   - Quick pack configuration selector in the dashboard header adapts the UI on the fly without rebooting.
+6. **Dual-Language UI (English / Ukrainian):**
+   - English default interface with instant toggle to Ukrainian (`🌐 EN` / `🌐 UA`).
+   - Preference is preserved in browser `localStorage`.
+7. **Vector SVG Favicon & HTTP Caching:**
+   - Built-in modern SVG lightning badge with 7-day browser caching headers (`Cache-Control: max-age=604800`).
+8. **Emergency Hardware Factory Reset:**
+   - Holding the onboard **`BOOT` button (GPIO 0)** for **4 seconds** resets NVS settings and safely restarts back to AP configuration mode.
+
+---
+
+## 📐 System Architecture
+
+```
+  +-----------------------------------------------------------+
+  |              LiFePO4 / Li-Ion Battery Pack                |
+  |                (4S 12V / 8S 24V / 16S 48V)                |
+  +-----------------------------+-----------------------------+
+                                |
+                                v
+                    +-----------------------+
+                    |        JK-BMS         |
+                    |    (JK02 Protocol)    |
+                    +-----------+-----------+
+                                |
+                                | Bluetooth 5.0 Low Energy (Service 0xFFE0)
+                                | Auto-stream 300-byte telemetry frames
+                                v
+            +---------------------------------------+
+            |      ESP32-S3 Super Mini Adapter      |
+            |  * FreeRTOS + NimBLE Client           |
+            |  * Async WebServer + REST API         |
+            |  * Embedded PROGMEM SPA Web Dashboard |
+            +-------------------+-------------------+
+                                |
+                +---------------+---------------+
+                |                               |
+                v (Stage 1: AP Mode)            v (Stage 2: STA Mode)
+    +-----------------------+       +-----------------------+
+    |   SoftAP + Captive    |       |   Home Wi-Fi LAN      |
+    |   "JK-BMS-Adapter"    |       |   http://jkbms.local  |
+    |   IP: 192.168.4.1     |       |   (or LAN IP address) |
+    +-----------+-----------+       +-----------+-----------+
+                |                               |
+                +---------------+---------------+
+                                |
+                                v
+                +-------------------------------+
+                | Smartphone / Tablet / Desktop |
+                |       Any Web Browser         |
+                +-------------------------------+
+```
+
+---
+
+## 🔌 Hardware & Pinout
+
+### ESP32-S3 Super Mini Board
+The **ESP32-S3 Super Mini** is an ultra-compact development board featuring the Espressif ESP32-S3 dual-core processor:
+
+| Component | Specification |
+| :--- | :--- |
+| **MCU** | Espressif ESP32-S3 (Xtensa LX7 32-bit Dual-Core) |
+| **Clock Frequency** | Scaled to **160 MHz** (low power, cool operation) |
+| **Flash Memory** | 4 MB Embedded XMC Flash (**Mode: DIO**) |
+| **PSRAM** | 2 MB Embedded AP_3v3 |
+| **SRAM** | 320 KB Internal SRAM |
+| **Wireless** | 2.4 GHz Wi-Fi (802.11 b/g/n) + Bluetooth 5.0 BLE |
+| **Connector** | USB Type-C (Native USB CDC On-Boot) |
+
+### Physical Button Functions
+*(With USB-C port facing UP and components facing you)*
+
+- **LEFT Button (`BOOT` / GPIO 0):**
+  - Hold for **4 seconds** $\rightarrow$ **Factory Reset** (wipes NVS Preferences and reboots to AP mode).
+- **RIGHT Button (`RST` / EN):**
+  - Instant hardware reboot.
+
+---
+
+## 🌐 Bilingual User Interface
+
+The web interface is fully localized in **English (default)** and **Ukrainian**:
+
+- Toggle between languages at any time using the `🌐 EN` / `🌐 UA` button.
+- Available in both:
+  1. **Main Telemetry Dashboard (`/`)**
+  2. **Initial Setup Page (`/setup` / Captive Portal)**
+- Browser `localStorage` retains the chosen language across page refreshes.
+
+---
+
+## 🔋 Multi-Cell Pack Support (4S / 8S / 16S)
+
+The adapter dynamically adjusts decoding offsets, calculations, and the visual display based on the selected configuration:
+
+- **4S (12V):** 4 cells (e.g., standard drop-in lead-acid replacement packs).
+- **8S (24V):** 8 cells.
+- **16S (48V):** 16 cells (e.g., home energy storage / server rack batteries).
+
+### Dynamic CSS Grid
+Cards automatically adapt to the screen resolution using CSS Grid auto-fill:
+`grid-template-columns: repeat(auto-fill, minmax(130px, 1fr))`
+
+---
+
+## 📡 REST API Specification
+
+All data and control endpoints communicate using lightweight JSON payloads:
+
+| Method | Endpoint | Description | Request Body / Response |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Web Dashboard (or Setup if unconfigured) | `text/html` |
+| `GET` | `/setup` | Explicit Setup page | `text/html` |
+| `GET` | `/favicon.ico` | SVG Favicon with cache headers | `image/svg+xml` |
+| `GET` | `/api/data` | Real-time live telemetry | JSON |
+| `POST`| `/api/set-cells` | Dynamic change of cell count (4, 8, 16) | `{"cells": 8}` |
+| `POST`| `/api/switch` | Toggle protection MOSFETs or Balancer | `{"switch":"charging","state":true}` |
+| `GET` | `/api/scan-wifi` | Scan 2.4 GHz Wi-Fi networks | `[{"ssid":"...","rssi":-55,"secure":true}]` |
+| `GET` | `/api/scan-ble` | Scan Bluetooth air for JK-BMS | `[{"name":"JK-BMS","mac":"...","rssi":-62}]` |
+| `POST`| `/api/save-config`| Save credentials & reboot | `{"ssid":"...","pass":"...","mac":"...","cells":4}` |
+| `POST`| `/api/reset-wifi` | Wipe NVS and reboot to AP | - |
+
+### Sample Telemetry Response (`GET /api/data`):
+```json
+{
+  "connected": true,
+  "total_voltage": 13.301,
+  "current": 0.0,
+  "power": 0.0,
+  "charge_power": 0.0,
+  "discharge_power": 0.0,
+  "soc": 89,
+  "capacity_remain": 135.085,
+  "cycle_count": 1,
+  "cycle_capacity": 302.929,
+  "cell_count": 4,
+  "cells": [3.325, 3.325, 3.326, 3.325],
+  "min_cell_idx": 1,
+  "max_cell_idx": 3,
+  "delta_cell_v": 0.001,
+  "temp_mos": 21.1,
+  "temp_sensor1": 20.0,
+  "temp_sensor2": 20.3,
+  "balancing_active": false,
+  "balancing_current": 0.0,
+  "balancer_direction": "Idle",
+  "switch_charging": true,
+  "switch_discharging": true,
+  "switch_balancer": true,
+  "errors": "OK"
+}
+```
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- [Visual Studio Code](https://code.visualstudio.com/) + [PlatformIO IDE extension](https://platformio.org/platformio-ide)
+- Or PlatformIO Core CLI (`pio`).
+
+### Flashing via PlatformIO
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3.git
+   cd JK-BMS-Smart-Monitor-ESP32-s3
+   ```
+
+2. **Connect the ESP32-S3 Super Mini** to your computer via USB-C.
+
+3. **Build and upload firmware:**
+   ```bash
+   pio run -t upload
+   ```
+
+4. **Monitor serial logs (optional):**
+   ```bash
+   pio device monitor
+   ```
+
+> [!IMPORTANT]
+> **Flash Mode Notice:** The embedded Flash memory on ESP32-S3 Super Mini requires **`DIO` mode** (`board_build.flash_mode = dio`) and standard 4MB partitions (`partitions = default.csv`). Setting `qio` will cause bootloader crash loops.
+
+---
+
+## 📱 Operating Guide
+
+### Step 1: Initial Provisioning (Captive Portal)
+1. On initial power-up, the ESP32-S3 creates an open Wi-Fi network:
+   - **SSID:** `JK-BMS-Adapter-Setup` (Open, no password).
+2. Connect using your phone, tablet, or laptop.
+3. The browser will automatically open the setup page (or navigate to `http://192.168.4.1/setup`).
+4. Click **🔄 Scan** to pick your home Wi-Fi SSID and enter your Wi-Fi password.
+5. Click **🔍 Find BMS** to detect nearby JK-BMS Bluetooth MAC addresses, or enter it manually.
+6. Select your battery configuration (**4S, 8S, or 16S**).
+7. Click **💾 Save & Connect**. The ESP32-S3 saves the settings into NVS and reboots.
+
+### Step 2: Normal Operation (LAN Dashboard)
+1. Connect to your home Wi-Fi network.
+2. Open your web browser and go to:
+   - **mDNS address:** `http://jkbms.local`
+   - Or direct IP assigned by your router (e.g., `http://192.168.1.150`).
+3. View real-time voltages, temperatures, SOC, and toggle switches directly from the page.
+
+---
+
+## ⚡ Resource & Thermal Optimization
+
+To ensure continuous, cool, 24/7 standalone operation:
+- **CPU Clock Frequency:** Reduced from 240 MHz to **160 MHz** (`board_build.f_cpu = 160000000L`). This cuts thermal output significantly while retaining plenty of performance.
+- **Modem Sleep:** `WiFi.setSleep(WIFI_PS_MIN_MODEM)` enables radio sleep intervals between DTIM beacons.
+- **Current Draw:** ~60 mA in steady monitoring state.
+- **Memory Footprint:**
+  - **RAM:** ~52 KB used (15.9%) / ~275 KB free SRAM.
+  - **Flash:** ~992 KB used (75%) / 1.3 MB partition.
+
+---
+
+## 🔍 Technical Findings & Protocol Gotchas
+
+- **JK-BMS BLE GATT Handles:**
+  Older modules (`C8:47:80:...`) require register writes to be sent to **`0xFFE2`** (`Write Without Response`) or `0xFFE1`.
+- **Handshake Sequence:**
+  Sending `0x96` (Cell Info) in a tight loop blocks the BMS. The correct handshake sends `0x97` (Device Info) once upon connection, followed by `0x96` once; the BMS then streams continuous `0x02` 300-byte telemetry packets.
+- **Cycle Count vs Cycled Capacity:**
+  - Byte `150 + offset` holds **`Cycle_Count`** (integer full cycles).
+  - Byte `154 + offset` holds **`Cycle_Capacity`** in milliampere-hours ($0.001\text{ Ah}$ total throughput).
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+Feel free to use, modify, and integrate into your home energy systems!
