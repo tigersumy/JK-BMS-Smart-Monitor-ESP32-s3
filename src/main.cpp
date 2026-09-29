@@ -184,6 +184,10 @@ void setupWebServerRoutes() {
         doc["ts_status"] = "NOT_SUPPORTED";
 #endif
 
+        doc["heap_free"] = ESP.getFreeHeap() / 1024;
+        doc["psram_free"] = ESP.getFreePsram() / 1024;
+        doc["psram_total"] = ESP.getPsramSize() / 1024;
+
         String out;
         serializeJson(doc, out);
         server.send(200, "application/json", out);

@@ -249,6 +249,14 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <span class="param-name" data-i18n="stat_errors">⚠️ JK-BMS Status / Errors</span>
           <span class="param-val val-green" id="val-errors">OK</span>
         </div>
+        <div class="param-row">
+          <span class="param-name" data-i18n="stat_heap">🧠 Free Internal Heap</span>
+          <span class="param-val val-blue" id="val-heap">-- KB</span>
+        </div>
+        <div class="param-row" id="row-psram" style="display:none;">
+          <span class="param-name" data-i18n="stat_psram">💾 Free PSRAM</span>
+          <span class="param-val val-cyan" id="val-psram">-- KB</span>
+        </div>
       </div>
     </section>
   </div>
@@ -281,6 +289,8 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
         stat_cycles: "🔄 Full Cycles Count",
         stat_cycle_cap: "⚡ Cumulative Cycled Capacity",
         stat_errors: "⚠️ JK-BMS Status / Errors",
+        stat_heap: "🧠 Free Internal Heap",
+        stat_psram: "💾 Free PSRAM",
         st_connecting: "Connecting...",
         st_connected: "BLE Connected",
         st_searching: "Searching BMS...",
@@ -316,6 +326,8 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
         stat_cycles: "🔄 Кількість повних циклів",
         stat_cycle_cap: "⚡ Напрацьована ємність (Цикли)",
         stat_errors: "⚠️ Статус / Помилки JK-BMS",
+        stat_heap: "🧠 Вільна пам'ять (Heap)",
+        stat_psram: "💾 Вільна PSRAM",
         st_connecting: "Підключення...",
         st_connected: "BLE Підключено",
         st_searching: "Пошук BMS...",
@@ -470,6 +482,15 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
       document.getElementById('val-errors').textContent = data.errors;
       if (data.errors !== 'OK (Без помилок)' && data.errors !== 'OK') {
         document.getElementById('val-errors').className = 'param-val val-orange';
+      }
+
+      if (data.heap_free !== undefined) {
+        document.getElementById('val-heap').textContent = data.heap_free + ' KB';
+      }
+      if (data.psram_free !== undefined && data.psram_total > 0) {
+        const psramRow = document.getElementById('row-psram');
+        if (psramRow) psramRow.style.display = 'flex';
+        document.getElementById('val-psram').textContent = data.psram_free + ' KB / ' + data.psram_total + ' KB';
       }
 
       // Switches update if user not dragging
