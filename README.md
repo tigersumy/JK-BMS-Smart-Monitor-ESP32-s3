@@ -1,15 +1,15 @@
-# ⚡ JK-BMS Smart Monitor & BLE-to-Wi-Fi Adapter (ESP32-S3)
+# ⚡ JK-BMS Smart Monitor & BLE-to-Wi-Fi Adapter (ESP32-S3 & ESP32-C6)
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Build%20Passed-orange?logo=platformio)](https://platformio.org/)
-[![Hardware](https://img.shields.io/badge/Hardware-ESP32--S3%20Super%20Mini-blue?logo=espressif)](https://www.espressif.com/)
+[![Hardware](https://img.shields.io/badge/Hardware-ESP32--S3%20%7C%20ESP32--C6%20Super%20Mini-blue?logo=espressif)](https://www.espressif.com/)
 [![Protocol](https://img.shields.io/badge/BMS%20Protocol-JK02%20BLE-green)](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3)
 [![Framework](https://img.shields.io/badge/Framework-Arduino%20ESP32-red?logo=arduino)](https://github.com/espressif/arduino-esp32)
 [![Pack Support](https://img.shields.io/badge/Battery%20Packs-4S%20%7C%208S%20%7C%2016S-brightgreen)](#-multi-cell-pack-support-4s--8s--16s)
 [![UI Language](https://img.shields.io/badge/Language-EN%20%7C%20UA-purple)](#-bilingual-user-interface)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Autonomous wireless IoT bridge and diagnostic web monitor for JK-BMS (JiKong BMS) battery management systems using the ultra-compact ESP32-S3 Super Mini.**  
-> *Zero hardcoded credentials, Captive Portal initial provisioning, BLE 5.0 continuous stream telemetry, dynamic responsive dark-themed dashboard, multi-cell (4S/8S/16S) support, and complete switch control (Charge MOS, Discharge MOS, Active Balancer).*
+> **Autonomous wireless IoT bridge and diagnostic web monitor for JK-BMS (JiKong BMS) battery management systems using ultra-compact ESP32-S3 and ESP32-C6 (Wi-Fi 6 & RISC-V) Super Mini.**  
+> *Zero hardcoded credentials, Captive Portal initial provisioning, BLE continuous stream telemetry, dynamic responsive dark-themed dashboard, multi-cell (4S/8S/16S) support, and complete switch control (Charge MOS, Discharge MOS, Active Balancer).*
 
 ---
 

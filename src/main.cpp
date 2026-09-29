@@ -10,8 +10,12 @@
 #include "JkBleClient.h"
 #include "WebDashboard.h"
 
-// Hardware Pin for ESP32-S3 Super Mini BOOT button
+// Hardware Pin for BOOT button (ESP32-C6 uses GPIO 9; ESP32-S3 uses GPIO 0)
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+static const uint8_t BOOT_BUTTON_PIN = 9;
+#else
 static const uint8_t BOOT_BUTTON_PIN = 0;
+#endif
 
 // Network & WebServer
 static const byte DNS_PORT = 53;
@@ -59,7 +63,7 @@ void setupWebServerRoutes() {
     // API: Live Telemetry Data
     server.on("/api/data", HTTP_GET, []() {
         const auto& t = bleClient.getTelemetry();
-        StaticJsonDocument<1024> doc;
+        JsonDocument doc;
         doc["connected"] = bleClient.isConnected();
         doc["total_voltage"] = t.total_voltage;
         doc["current"] = t.current;
@@ -72,7 +76,7 @@ void setupWebServerRoutes() {
         doc["cycle_capacity"] = t.cycle_capacity;
         doc["cell_count"] = t.cell_count;
 
-        JsonArray cells = doc.createNestedArray("cells");
+        JsonArray cells = doc["cells"].to<JsonArray>();
         for (int i = 0; i < t.cell_count && i < 16; i++) {
             cells.add(t.cell_voltages[i]);
         }
@@ -103,11 +107,11 @@ void setupWebServerRoutes() {
     server.on("/api/scan-wifi", HTTP_GET, []() {
         Serial.println("[WIFI] Scanning networks...");
         int n = WiFi.scanNetworks(false, false);
-        DynamicJsonDocument doc(2048);
+        JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
 
         for (int i = 0; i < n; i++) {
-            JsonObject item = arr.createNestedObject();
+            JsonObject item = arr.add<JsonObject>();
             item["ssid"] = WiFi.SSID(i);
             item["rssi"] = WiFi.RSSI(i);
             item["secure"] = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
@@ -122,11 +126,11 @@ void setupWebServerRoutes() {
     // API: Scan BLE for JK-BMS devices
     server.on("/api/scan-ble", HTTP_GET, []() {
         auto list = JkBleClient::scanForBms(4);
-        DynamicJsonDocument doc(1024);
+        JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
 
         for (const auto& item : list) {
-            JsonObject obj = arr.createNestedObject();
+            JsonObject obj = arr.add<JsonObject>();
             obj["name"] = item.name;
             obj["mac"]  = item.mac;
             obj["rssi"] = item.rssi;
@@ -143,7 +147,7 @@ void setupWebServerRoutes() {
             server.send(400, "application/json", "{\"error\":\"Missing body\"}");
             return;
         }
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         DeserializationError err = deserializeJson(doc, server.arg("plain"));
         if (err) {
             server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
@@ -175,7 +179,7 @@ void setupWebServerRoutes() {
             server.send(400, "application/json", "{\"error\":\"Missing body\"}");
             return;
         }
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         deserializeJson(doc, server.arg("plain"));
 
         AppConfig cfg;
@@ -202,7 +206,7 @@ void setupWebServerRoutes() {
             server.send(400, "application/json", "{\"error\":\"Missing body\"}");
             return;
         }
-        StaticJsonDocument<128> doc;
+        JsonDocument doc;
         deserializeJson(doc, server.arg("plain"));
         uint8_t count = doc["cells"] | 4;
         if (count == 4 || count == 8 || count == 16) {
@@ -271,7 +275,11 @@ void setup() {
     Serial.begin(115200);
     delay(1500);
     Serial.println("\n=========================================");
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+    Serial.println("  JK-BMS Universal Adapter (ESP32-C6)   ");
+#else
     Serial.println("  JK-BMS Universal Adapter (ESP32-S3)   ");
+#endif
     Serial.println("=========================================");
 
     pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);

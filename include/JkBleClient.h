@@ -29,7 +29,11 @@ public:
 
     // NimBLE Callbacks
     void onConnect(NimBLEClient* pClient) override;
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || (defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5)
+    void onDisconnect(NimBLEClient* pClient, int reason) override;
+#else
     void onDisconnect(NimBLEClient* pClient) override;
+#endif
 
 private:
     void sendCellInfoRequest();

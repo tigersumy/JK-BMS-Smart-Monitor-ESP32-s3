@@ -7,7 +7,11 @@ JkBleClient::JkBleClient() {
 }
 
 bool JkBleClient::init() {
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+    NimBLEDevice::init("ESP32C6-JKBMS");
+#else
     NimBLEDevice::init("ESP32S3-JKBMS");
+#endif
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
     NimBLEDevice::setSecurityAuth(false, false, false);
     return true;
@@ -30,8 +34,13 @@ void JkBleClient::onConnect(NimBLEClient* pClient) {
     Serial.println("[BLE] Connected to JK-BMS successfully");
 }
 
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || (defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5)
+void JkBleClient::onDisconnect(NimBLEClient* pClient, int reason) {
+    Serial.printf("[BLE] Disconnected from JK-BMS (reason: %d)\n", reason);
+#else
 void JkBleClient::onDisconnect(NimBLEClient* pClient) {
     Serial.println("[BLE] Disconnected from JK-BMS");
+#endif
     telemetry_.connected = false;
     pCharWrite_ = nullptr;
     pCharNotify_ = nullptr;
@@ -56,7 +65,11 @@ bool JkBleClient::connect() {
         pClient_->setConnectTimeout(5);
     }
 
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || (defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5)
+    NimBLEAddress bleAddr(std::string(targetMac_.c_str()), BLE_ADDR_PUBLIC);
+#else
     NimBLEAddress bleAddr(targetMac_.c_str());
+#endif
     if (!pClient_->connect(bleAddr, false)) {
         Serial.println("[BLE] Failed to connect to peripheral");
         isConnecting_ = false;
@@ -75,6 +88,26 @@ bool JkBleClient::connect() {
     pCharWrite_ = nullptr;
     pCharNotify_ = nullptr;
 
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || (defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5)
+    for (auto* c : pSvc->getCharacteristics(true)) {
+        String uuid = c->getUUID().toString().c_str();
+        uuid.toLowerCase();
+        Serial.printf("[BLE]   UUID: %s, handle: %d, canNotify: %d, canWrite: %d, canWriteNoResp: %d\n",
+                      uuid.c_str(), c->getHandle(), 
+                      c->canNotify(), c->canWrite(), c->canWriteNoResponse());
+
+        if (uuid.indexOf("ffe2") >= 0 || (c->canWriteNoResponse() && !c->canNotify())) {
+            pCharWrite_ = c;
+            Serial.printf("[BLE]   Selected write characteristic: handle %d\n", c->getHandle());
+        }
+
+        if (uuid.indexOf("ffe1") >= 0 || c->canNotify()) {
+            pCharNotify_ = c;
+            c->subscribe(true, notifyCallback);
+            Serial.printf("[BLE]   Subscribed to notify on handle %d\n", c->getHandle());
+        }
+    }
+#else
     auto* chars = pSvc->getCharacteristics(true);
     if (chars) {
         for (auto* c : *chars) {
@@ -96,6 +129,7 @@ bool JkBleClient::connect() {
             }
         }
     }
+#endif
 
     if (!pCharWrite_ && pCharNotify_) {
         pCharWrite_ = pCharNotify_;
@@ -361,6 +395,26 @@ std::vector<BleDiscoveredDevice> JkBleClient::scanForBms(uint32_t durationSec) {
     pScan->setWindow(67);
     
     Serial.println("[BLE] Starting BLE scan for JK-BMS...");
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || (defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5)
+    pScan->start(durationSec, false);
+    NimBLEScanResults scanResults = pScan->getResults();
+    for (int i = 0; i < scanResults.getCount(); i++) {
+        const NimBLEAdvertisedDevice* dev = scanResults.getDevice(i);
+        if (!dev) continue;
+        String name = dev->getName().c_str();
+        String mac = dev->getAddress().toString().c_str();
+        int rssi = dev->getRSSI();
+
+        // Check if name contains JK or service UUID is present
+        if (name.indexOf("JK") >= 0 || name.indexOf("BMS") >= 0 || dev->isAdvertisingService(NimBLEUUID("ffe0"))) {
+            BleDiscoveredDevice item;
+            item.name = name.length() > 0 ? name : "JK-BMS Unknown";
+            item.mac = mac;
+            item.rssi = rssi;
+            results.push_back(item);
+        }
+    }
+#else
     NimBLEScanResults scanResults = pScan->start(durationSec, false);
     
     for (int i = 0; i < scanResults.getCount(); i++) {
@@ -378,6 +432,7 @@ std::vector<BleDiscoveredDevice> JkBleClient::scanForBms(uint32_t durationSec) {
             results.push_back(item);
         }
     }
+#endif
     pScan->clearResults();
     Serial.printf("[BLE] Scan complete. Found %d BMS candidate(s)\n", results.size());
     return results;
