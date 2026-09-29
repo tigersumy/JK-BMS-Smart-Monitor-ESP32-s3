@@ -62,19 +62,41 @@ bool JkBleClient::connect() {
         pClient_ = NimBLEDevice::createClient();
         pClient_->setClientCallbacks(this, false);
         pClient_->setConnectionParams(12, 12, 0, 200); // Fast connection
-        pClient_->setConnectTimeout(5);
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || (defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5)
+        pClient_->setConnectTimeout(6000); // 6000 ms in NimBLE 2.x
+#else
+        pClient_->setConnectTimeout(6);    // 6 seconds in NimBLE 1.x
+#endif
     }
 
 #if defined(CONFIG_IDF_TARGET_ESP32C6) || (defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5)
-    NimBLEAddress bleAddr(std::string(targetMac_.c_str()), BLE_ADDR_PUBLIC);
+    // Auto-detect Static Random address (top 2 bits of MSB == 11, e.g. 0xC0..0xFF)
+    unsigned int firstByte = 0;
+    sscanf(targetMac_.c_str(), "%02x", &firstByte);
+    uint8_t primaryType = ((firstByte & 0xC0) == 0xC0) ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC;
+    uint8_t secondaryType = (primaryType == BLE_ADDR_PUBLIC) ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC;
+
+    NimBLEAddress bleAddr(std::string(targetMac_.c_str()), primaryType);
+    bool connected = pClient_->connect(bleAddr, false);
+    if (!connected) {
+        Serial.printf("[BLE] Connect with type %d failed, trying fallback type %d...\n", primaryType, secondaryType);
+        NimBLEAddress altAddr(std::string(targetMac_.c_str()), secondaryType);
+        connected = pClient_->connect(altAddr, false);
+    }
+
+    if (!connected) {
+        Serial.println("[BLE] Failed to connect to peripheral");
+        isConnecting_ = false;
+        return false;
+    }
 #else
     NimBLEAddress bleAddr(targetMac_.c_str());
-#endif
     if (!pClient_->connect(bleAddr, false)) {
         Serial.println("[BLE] Failed to connect to peripheral");
         isConnecting_ = false;
         return false;
     }
+#endif
 
     NimBLERemoteService* pSvc = pClient_->getService(JK_SERVICE_UUID);
     if (!pSvc) {
