@@ -20,6 +20,7 @@
 - [Hardware & Pinout](#-hardware--pinout)
 - [Bilingual Interface (EN / UA)](#-bilingual-user-interface)
 - [Multi-Cell Pack Support (4S / 8S / 16S)](#-multi-cell-pack-support-4s--8s--16s)
+- [Tailscale VPN Remote Access (ESP32-S3)](#-tailscale-vpn-remote-access-esp32-s3)
 - [REST API Specification](#-rest-api-specification)
 - [Getting Started](#-getting-started)
   - [Prerequisites](#prerequisites)
@@ -28,6 +29,7 @@
   - [Normal Operation (LAN Dashboard)](#step-2-normal-operation-lan-dashboard)
 - [Resource & Thermal Optimization](#-resource--thermal-optimization)
 - [Technical Findings & Protocol Gotchas](#-technical-findings--protocol-gotchas)
+- [Acknowledgements & Credits](#-acknowledgements--credits)
 - [License](#-license)
 
 ---
@@ -55,9 +57,12 @@
 6. **Dual-Language UI (English / Ukrainian):**
    - English default interface with instant toggle to Ukrainian (`🌐 EN` / `🌐 UA`).
    - Preference is preserved in browser `localStorage`.
-7. **Vector SVG Favicon & HTTP Caching:**
+7. **Tailscale VPN Remote Access (ESP32-S3):**
+   - Secure, direct remote access to the web dashboard and REST API over the internet from anywhere in the world without port forwarding, dynamic DNS, or public IP addresses.
+   - Native Tailscale client (ts2021 control protocol, Noise IK mutual authentication, DERP relaying, and WireGuard lwIP netif).
+8. **Vector SVG Favicon & HTTP Caching:**
    - Built-in modern SVG lightning badge with 7-day browser caching headers (`Cache-Control: max-age=604800`).
-8. **Emergency Hardware Factory Reset:**
+9. **Emergency Hardware Factory Reset:**
    - Holding the onboard **`BOOT` button (GPIO 0)** for **4 seconds** resets NVS settings and safely restarts back to AP configuration mode.
 
 ---
@@ -271,6 +276,16 @@ To ensure continuous, cool, 24/7 standalone operation:
 
 ---
 
+## 🌐 Tailscale VPN Remote Access (ESP32-S3)
+
+The ESP32-S3 firmware includes an embedded Tailscale VPN client based on [MicroLink](https://github.com/CamM2325/microlink) and WireGuard lwIP:
+- **Zero-Configuration NAT Traversal:** Connects to your Tailscale network (*tailnet*) over standard Wi-Fi, establishing direct encrypted P2P WireGuard sessions (or fallback via DERP relay).
+- **Direct Remote Access:** Allows opening the dashboard and querying the REST API from anywhere in the world using the device's Tailscale IP (e.g. `http://100.123.22.43/` or `http://jkbms-esp32/`).
+- **Memory Efficient:** Large buffers (HTTP/2, JSON tree, WireGuard state) are dynamically allocated in the 2 MB PSRAM, preserving internal SRAM.
+- **Easy Provisioning:** Tailscale Auth Key and hostname can be entered directly from the `/setup` captive portal or configuration page.
+
+---
+
 ## 🔍 Technical Findings & Protocol Gotchas
 
 - **JK-BMS BLE GATT Handles:**
@@ -280,6 +295,16 @@ To ensure continuous, cool, 24/7 standalone operation:
 - **Cycle Count vs Cycled Capacity:**
   - Byte `150 + offset` holds **`Cycle_Count`** (integer full cycles).
   - Byte `154 + offset` holds **`Cycle_Capacity`** in milliampere-hours ($0.001\text{ Ah}$ total throughput).
+
+---
+
+## 🤝 Acknowledgements & Credits
+
+This project builds upon and integrates several exceptional open-source libraries:
+- **[MicroLink by CamM2325](https://github.com/CamM2325/microlink):** The embedded Tailscale client implementation for ESP32 (ts2021 control protocol, Noise IK mutual authentication, DERP relay protocol, and magicsock architecture) is adapted from the MicroLink project.
+- **[wireguard-lwip by Daniel Hope](https://github.com/djp952/wireguard-lwip):** Lightweight WireGuard implementation for lwIP providing ChaCha20-Poly1305, BLAKE2s, and Curve25519 cryptographic primitives.
+- **[NimBLE-Arduino by h2zero](https://github.com/h2zero/NimBLE-Arduino):** Memory-efficient Bluetooth Low Energy stack for ESP32.
+- **[ArduinoJson by Benoît Blanchon](https://arduinojson.org/):** High-performance JSON parser for embedded systems.
 
 ---
 
