@@ -166,6 +166,7 @@ static void chacha20_init_rfc7539(struct chacha20_ctx *ctx, const uint8_t *key, 
 static void ml_aead_poly1305_key(struct poly1305_context *poly, const uint8_t *key, const uint8_t nonce[12]) {
     struct chacha20_ctx chacha;
     uint8_t block[64];
+    memset(block, 0, sizeof(block));
     chacha20_init_rfc7539(&chacha, key, nonce, 0);
     chacha20(&chacha, block, block, 64);
     poly1305_init(poly, block);
@@ -193,7 +194,9 @@ static int ml_noise_aead_encrypt(const uint8_t *key, uint64_t nonce,
 
     struct chacha20_ctx chacha;
     chacha20_init_rfc7539(&chacha, key, nonce_bytes, 1);
-    chacha20(&chacha, ciphertext, plaintext, pt_len);
+    if (plaintext && pt_len > 0) {
+        chacha20(&chacha, ciphertext, plaintext, pt_len);
+    }
     crypto_zero(&chacha, sizeof(chacha));
 
     static const uint8_t zero[16] = {0};
@@ -262,7 +265,9 @@ static int ml_noise_aead_decrypt(const uint8_t *key, uint64_t nonce,
 
     struct chacha20_ctx chacha;
     chacha20_init_rfc7539(&chacha, key, nonce_bytes, 1);
-    chacha20(&chacha, plaintext, ciphertext, payload_len);
+    if (plaintext && payload_len > 0) {
+        chacha20(&chacha, plaintext, ciphertext, payload_len);
+    }
     crypto_zero(&chacha, sizeof(chacha));
     return 0;
 }

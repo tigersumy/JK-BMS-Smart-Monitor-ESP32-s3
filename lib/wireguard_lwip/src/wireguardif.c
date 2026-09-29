@@ -79,6 +79,32 @@ bool wireguardif_is_wireguard_packet(const uint8_t *data, size_t len) {
 	return (type >= 1 && type <= 4);
 }
 
+static inline void wireguardif_netif_set_link_up_safe(struct netif *netif) {
+	if (!netif) return;
+	bool need_unlock = false;
+	if (!sys_thread_tcpip(LWIP_CORE_LOCK_QUERY_HOLDER)) {
+		LOCK_TCPIP_CORE();
+		need_unlock = true;
+	}
+	netif_set_link_up(netif);
+	if (need_unlock) {
+		UNLOCK_TCPIP_CORE();
+	}
+}
+
+static inline void wireguardif_netif_set_link_down_safe(struct netif *netif) {
+	if (!netif) return;
+	bool need_unlock = false;
+	if (!sys_thread_tcpip(LWIP_CORE_LOCK_QUERY_HOLDER)) {
+		LOCK_TCPIP_CORE();
+		need_unlock = true;
+	}
+	netif_set_link_down(netif);
+	if (need_unlock) {
+		UNLOCK_TCPIP_CORE();
+	}
+}
+
 
 static void update_peer_addr(struct wireguard_peer *peer, const ip_addr_t *addr, u16_t port) {
 	// Don't overwrite a valid endpoint with 0.0.0.0 (DERP-injected packets have no real source)
@@ -391,7 +417,7 @@ static void wireguardif_process_response_message(struct wireguard_device *device
 		wireguardif_send_keepalive(device, peer);
 
 		// Set the IF-UP flag on netif
-		netif_set_link_up(device->netif);
+		wireguardif_netif_set_link_up_safe(device->netif);
 		printf("[WG] *** WIREGUARD SESSION ESTABLISHED wg_idx=%u ***\n", wg_idx);
 	} else {
 		// Packet bad
@@ -482,7 +508,7 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 					}
 
 					// Make sure that link is reported as up
-					netif_set_link_up(device->netif);
+					wireguardif_netif_set_link_up_safe(device->netif);
 
 					if (pbuf->tot_len > 0) {
 						//4a. Once the packet payload is decrypted, the interface has a plaintext packet. If this is not an IP packet, it is dropped.
@@ -537,9 +563,13 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 
 								// 5. If the plaintext packet has not been dropped, it is inserted into the receive queue of the wg0 interface.
 								if (dest_ok) {
-									// Send packet to be processed by LWIP
+									// Send packet to be processed by LWIP via netif->input (tcpip_input)
 									WG_DEBUG("[WG_RX_IP] Passing %u bytes to IP layer\n", (unsigned)pbuf->tot_len);
-									ip_input(pbuf, device->netif);
+									if (device->netif->input) {
+										device->netif->input(pbuf, device->netif);
+									} else {
+										tcpip_input(pbuf, device->netif);
+									}
 									// pbuf is owned by IP layer now
 									pbuf = NULL;
 								} else {
@@ -1155,7 +1185,7 @@ static void wireguardif_tmr(void *arg) {
 
 	if (!link_up) {
 		// Clear the IF-UP flag on netif
-		netif_set_link_down(device->netif);
+		wireguardif_netif_set_link_down_safe(device->netif);
 	}
 }
 
@@ -1205,7 +1235,7 @@ void wireguardif_periodic(struct netif *netif) {
 		}
 	}
 	if (!link_up) {
-		netif_set_link_down(device->netif);
+		wireguardif_netif_set_link_down_safe(device->netif);
 	}
 }
 

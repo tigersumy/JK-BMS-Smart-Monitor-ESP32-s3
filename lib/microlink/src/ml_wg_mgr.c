@@ -206,7 +206,18 @@ static err_t wg_udp_output_cb(uint32_t dest_ip, uint16_t dest_port,
     IP_SET_TYPE_VAL(dst, IPADDR_TYPE_V4);
     ip4_addr_set_u32(ip_2_ip4(&dst), dest_ip);  /* already network byte order */
 
+    bool need_unlock = false;
+    if (!sys_thread_tcpip(LWIP_CORE_LOCK_QUERY_HOLDER)) {
+        LOCK_TCPIP_CORE();
+        need_unlock = true;
+    }
+
     err_t err = udp_sendto(s_wg_output_pcb, p, &dst, dest_port);
+
+    if (need_unlock) {
+        UNLOCK_TCPIP_CORE();
+    }
+
     pbuf_free(p);
     return err;
 }
@@ -264,6 +275,8 @@ static esp_err_t wg_init_interface(microlink_t *ml) {
      * callback uses raw udp_sendto (not BSD sendto) to avoid deadlock. */
     netif->input = tcpip_input;
 
+    LOCK_TCPIP_CORE();
+
     /* Add to lwIP netif list (bypass netif_add which wants init callback) */
     netif->next = netif_list;
     netif_list = netif;
@@ -287,6 +300,8 @@ static esp_err_t wg_init_interface(microlink_t *ml) {
             s_wg_output_pcb->tos = 0xB8;
         }
     }
+
+    UNLOCK_TCPIP_CORE();
 
     /* Register output callbacks for magicsock mode */
     wireguardif_set_derp_output(netif, wg_derp_output_cb, ml);
@@ -338,7 +353,22 @@ static void wg_update_vpn_ip(microlink_t *ml) {
         uint8_t b = (ml->vpn_ip >> 16) & 0xFF;
         uint8_t c = (ml->vpn_ip >> 8) & 0xFF;
         uint8_t d = ml->vpn_ip & 0xFF;
-        IP4_ADDR(&netif->ip_addr.u_addr.ip4, a, b, c, d);
+
+        ip4_addr_t ip, netmask, gw;
+        IP4_ADDR(&ip, a, b, c, d);
+        IP4_ADDR(&netmask, 255, 192, 0, 0);     /* /10 */
+        IP4_ADDR(&gw, 0, 0, 0, 0);
+
+        bool need_unlock = false;
+        if (!sys_thread_tcpip(LWIP_CORE_LOCK_QUERY_HOLDER)) {
+            LOCK_TCPIP_CORE();
+            need_unlock = true;
+        }
+        netif_set_addr(netif, &ip, &netmask, &gw);
+        if (need_unlock) {
+            UNLOCK_TCPIP_CORE();
+        }
+        ESP_LOGI(TAG, "WireGuard netif IP updated to %d.%d.%d.%d/10", a, b, c, d);
     }
 }
 
@@ -1643,10 +1673,11 @@ void ml_wg_mgr_task(void *arg) {
     if (ml->wg_netif) {
         struct netif *netif = (struct netif *)ml->wg_netif;
         wireguardif_shutdown(netif);
+        LOCK_TCPIP_CORE();
         netif_set_link_down(netif);
         netif_set_down(netif);
-        vTaskDelay(pdMS_TO_TICKS(100));
         netif_remove(netif);
+        UNLOCK_TCPIP_CORE();
         free(netif);
         ml->wg_netif = NULL;
     }
