@@ -10,6 +10,10 @@
 #include "JkBleClient.h"
 #include "WebDashboard.h"
 
+#if ENABLE_TAILSCALE
+#include "microlink.h"
+#endif
+
 // Hardware Pin for BOOT button (ESP32-C6 uses GPIO 9; ESP32-S3 uses GPIO 0)
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 static const uint8_t BOOT_BUTTON_PIN = 9;
@@ -26,6 +30,76 @@ static AppConfig currentConfig;
 static JkBleClient bleClient;
 static bool isApMode = false;
 static uint32_t bootPressStart = 0;
+
+#if ENABLE_TAILSCALE
+static microlink_t* mlHandle = nullptr;
+static microlink_state_t tsState = ML_STATE_IDLE;
+static String tsVpnIpStr = "";
+static String tsStatusStr = "IDLE";
+
+static void onTailscaleStateChange(microlink_t* ml, microlink_state_t state, void* user_data) {
+    tsState = state;
+    const char *state_names[] = {
+        "IDLE", "WIFI_WAIT", "CONNECTING", "REGISTERING",
+        "CONNECTED", "RECONNECTING", "ERROR"
+    };
+    tsStatusStr = (state < sizeof(state_names)/sizeof(state_names[0])) ? state_names[state] : "UNKNOWN";
+    Serial.printf("[TAILSCALE] State: %s\n", tsStatusStr.c_str());
+
+    if (state == ML_STATE_CONNECTED) {
+        uint32_t ip = microlink_get_vpn_ip(ml);
+        char ip_str[16];
+        microlink_ip_to_str(ip, ip_str);
+        tsVpnIpStr = String(ip_str);
+        Serial.printf("[TAILSCALE] Connected to Tailnet! VPN IP: %s\n", ip_str);
+    }
+}
+
+void startTailscaleClient() {
+    if (!currentConfig.ts_enabled || currentConfig.ts_auth_key.length() == 0) {
+        Serial.println("[TAILSCALE] Disabled or no Auth Key configured.");
+        return;
+    }
+    if (mlHandle != nullptr) {
+        Serial.println("[TAILSCALE] Already running.");
+        return;
+    }
+
+    Serial.printf("[TAILSCALE] Starting Tailscale client (hostname: %s)...\n", 
+                  currentConfig.ts_hostname.c_str());
+
+    microlink_config_t config = {
+        .auth_key = currentConfig.ts_auth_key.c_str(),
+        .device_name = currentConfig.ts_hostname.length() > 0 ? currentConfig.ts_hostname.c_str() : "jkbms-esp32",
+        .enable_derp = true,
+        .enable_stun = true,
+        .enable_disco = true,
+        .max_peers = 16,
+        .wifi_tx_power_dbm = 13,
+        .priority_peer_ip = 0,
+        .disco_heartbeat_ms = 0,
+        .stun_interval_ms = 0,
+        .ctrl_watchdog_ms = 0
+    };
+
+    mlHandle = microlink_init(&config);
+    if (!mlHandle) {
+        Serial.println("[TAILSCALE] ERROR: Failed to initialize MicroLink!");
+        tsStatusStr = "INIT_FAILED";
+        return;
+    }
+
+    microlink_set_state_callback(mlHandle, onTailscaleStateChange, NULL);
+    esp_err_t err = microlink_start(mlHandle);
+    if (err != ESP_OK) {
+        Serial.printf("[TAILSCALE] ERROR: microlink_start returned %d\n", err);
+        tsStatusStr = "START_FAILED";
+    } else {
+        Serial.println("[TAILSCALE] MicroLink started in background.");
+        tsStatusStr = "CONNECTING";
+    }
+}
+#endif
 
 // Captive Portal detection
 bool isCaptivePortalRequest() {
@@ -98,6 +172,33 @@ void setupWebServerRoutes() {
 
         doc["errors"] = t.errors_str;
 
+#if ENABLE_TAILSCALE
+        doc["ts_enabled"] = currentConfig.ts_enabled;
+        doc["ts_connected"] = (tsState == ML_STATE_CONNECTED);
+        doc["ts_ip"] = tsVpnIpStr;
+        doc["ts_status"] = tsStatusStr;
+#else
+        doc["ts_enabled"] = false;
+        doc["ts_connected"] = false;
+        doc["ts_ip"] = "";
+        doc["ts_status"] = "NOT_SUPPORTED";
+#endif
+
+        String out;
+        serializeJson(doc, out);
+        server.send(200, "application/json", out);
+    });
+
+    // API: Current Configuration
+    server.on("/api/config", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["ssid"] = currentConfig.wifi_ssid;
+        doc["mac"]  = currentConfig.bms_mac;
+        doc["pin"]  = currentConfig.bms_pin;
+        doc["cells"] = currentConfig.cell_count;
+        doc["ts_enabled"] = currentConfig.ts_enabled;
+        doc["ts_hostname"] = currentConfig.ts_hostname;
+        doc["has_ts_key"] = (currentConfig.ts_auth_key.length() > 0);
         String out;
         serializeJson(doc, out);
         server.send(200, "application/json", out);
@@ -192,6 +293,22 @@ void setupWebServerRoutes() {
             cfg.cell_count = 4;
         }
 
+        if (doc["ts_enabled"].is<bool>()) {
+            cfg.ts_enabled = doc["ts_enabled"].as<bool>();
+        }
+        if (doc["ts_hostname"].is<String>()) {
+            String h = doc["ts_hostname"].as<String>();
+            if (h.length() > 0) cfg.ts_hostname = h;
+        }
+        if (doc["ts_auth_key"].is<String>()) {
+            String k = doc["ts_auth_key"].as<String>();
+            if (k.length() > 0) {
+                cfg.ts_auth_key = k;
+            } else {
+                cfg.ts_auth_key = currentConfig.ts_auth_key;
+            }
+        }
+
         ConfigManager::save(cfg);
         server.send(200, "application/json", "{\"status\":\"saved\"}");
 
@@ -282,6 +399,13 @@ void setup() {
 #endif
     Serial.println("=========================================");
 
+    Serial.printf("[SYSTEM] Chip: %s | CPU: %d MHz | Free Heap: %d KB | PSRAM: %d KB / %d KB\n",
+                  ESP.getChipModel(),
+                  ESP.getCpuFreqMHz(),
+                  ESP.getFreeHeap() / 1024,
+                  ESP.getFreePsram() / 1024,
+                  ESP.getPsramSize() / 1024);
+
     pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
 
     currentConfig = ConfigManager::load();
@@ -315,6 +439,9 @@ void setup() {
                 MDNS.addService("http", "tcp", 80);
                 Serial.println("[MDNS] Responding at http://jkbms.local");
             }
+#if ENABLE_TAILSCALE
+            startTailscaleClient();
+#endif
         } else {
             Serial.println("[WIFI] Connection failed. Falling back to AP mode.");
             startApMode();
@@ -342,9 +469,19 @@ void loop() {
     static uint32_t lastHb = 0;
     if (millis() - lastHb > 60000) {
         lastHb = millis();
+#if ENABLE_TAILSCALE
+        Serial.printf("[STATUS] IP: %s | Tailscale: %s (%s) | Free Heap: %d KB | PSRAM: %d KB | BLE: %s\n", 
+                      WiFi.localIP().toString().c_str(), 
+                      tsStatusStr.c_str(),
+                      tsVpnIpStr.length() > 0 ? tsVpnIpStr.c_str() : "No IP",
+                      ESP.getFreeHeap() / 1024,
+                      ESP.getFreePsram() / 1024,
+                      bleClient.isConnected() ? "Connected" : "Disconnected");
+#else
         Serial.printf("[STATUS] IP: %s | Free Heap: %d KB | BLE: %s\n", 
                       WiFi.localIP().toString().c_str(), 
                       ESP.getFreeHeap() / 1024,
                       bleClient.isConnected() ? "Connected" : "Disconnected");
+#endif
     }
 }

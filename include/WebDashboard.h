@@ -131,6 +131,10 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <option value="16">16S (48V)</option>
           </select>
         </div>
+        <div class="status-badge" id="ts-badge" style="display:none;" title="Tailscale VPN">
+          <div class="dot" id="ts-dot"></div>
+          <span id="ts-ip-text">VPN: --</span>
+        </div>
         <div class="status-badge">
           <div class="dot" id="status-dot"></div>
           <span id="status-text">Connecting...</span>
@@ -474,6 +478,20 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
         document.getElementById('sw-discharge').checked = data.switch_discharging;
         document.getElementById('sw-balancer').checked = data.switch_balancer;
       }
+
+      // Tailscale VPN status
+      const tsBadge = document.getElementById('ts-badge');
+      if (tsBadge) {
+        if (data.ts_enabled) {
+          tsBadge.style.display = 'flex';
+          const tsDot = document.getElementById('ts-dot');
+          const tsText = document.getElementById('ts-ip-text');
+          if (tsDot) tsDot.className = data.ts_connected ? 'dot online' : 'dot';
+          if (tsText) tsText.textContent = data.ts_connected ? ('VPN: ' + data.ts_ip) : ('VPN: ' + (data.ts_status || 'Waiting'));
+        } else {
+          tsBadge.style.display = 'none';
+        }
+      }
     }
 
     async function fetchData() {
@@ -617,6 +635,27 @@ static const char SETUP_HTML[] PROGMEM = R"rawliteral(
         </select>
       </div>
 
+      <!-- Tailscale VPN Section -->
+      <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:16px; margin-top:16px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <label style="font-weight:700; margin:0;" data-i18n="ts_section_title">🌐 Tailscale VPN</label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.85rem;">
+            <input type="checkbox" id="ts-enabled" onchange="document.getElementById('ts-fields').style.display = this.checked ? 'block' : 'none'"> <span data-i18n="ts_enable_chk">Enable</span>
+          </label>
+        </div>
+        <div id="ts-fields" style="display:none;">
+          <div class="field-group">
+            <label data-i18n="ts_key_lbl">Tailscale Auth Key:</label>
+            <input type="password" id="ts-key" placeholder="tskey-auth-k..." autocomplete="off">
+            <p style="font-size:0.75rem; color:var(--text-mut); margin-top:4px;" data-i18n="ts_key_help">Generate key at login.tailscale.com/admin/settings/keys</p>
+          </div>
+          <div class="field-group">
+            <label data-i18n="ts_host_lbl">Device Hostname (Tailnet Name):</label>
+            <input type="text" id="ts-host" value="jkbms-esp32" placeholder="jkbms-esp32">
+          </div>
+        </div>
+      </div>
+
       <button type="submit" class="btn btn-primary" id="btn-submit" data-i18n="btn_save">💾 Save & Connect</button>
     </form>
 
@@ -646,6 +685,11 @@ static const char SETUP_HTML[] PROGMEM = R"rawliteral(
         opt_4s: "4S (12V Pack - 4 cells)",
         opt_8s: "8S (24V Pack - 8 cells)",
         opt_16s: "16S (48V Pack - 16 cells)",
+        ts_section_title: "🌐 Tailscale VPN (Remote Access)",
+        ts_enable_chk: "Enable",
+        ts_key_lbl: "Tailscale Auth Key:",
+        ts_key_help: "Generate key in Tailscale Admin -> Settings -> Keys",
+        ts_host_lbl: "Device Hostname (Tailnet Name):",
         btn_save: "💾 Save & Connect",
         btn_saving: "Saving...",
         btn_scanning: "⏳ Scanning...",
@@ -670,6 +714,11 @@ static const char SETUP_HTML[] PROGMEM = R"rawliteral(
         opt_4s: "4S (12V АКБ - 4 осередки)",
         opt_8s: "8S (24V АКБ - 8 осередків)",
         opt_16s: "16S (48V АКБ - 16 осередків)",
+        ts_section_title: "🌐 Tailscale VPN (Дистанційний доступ)",
+        ts_enable_chk: "Увімкнути",
+        ts_key_lbl: "Tailscale Auth Key (Ключ авторизації):",
+        ts_key_help: "Створіть ключ у кабінеті Tailscale: Settings -> Keys",
+        ts_host_lbl: "Ім'я пристрою (Tailnet Hostname):",
         btn_save: "💾 Зберегти та підключитися",
         btn_saving: "Збереження...",
         btn_scanning: "⏳ Пошук...",
@@ -764,7 +813,10 @@ static const char SETUP_HTML[] PROGMEM = R"rawliteral(
         pass: document.getElementById('wifi-pass').value.trim(),
         mac: document.getElementById('bms-mac').value.trim(),
         pin: document.getElementById('bms-pin').value.trim(),
-        cells: parseInt(document.getElementById('cell-count').value)
+        cells: parseInt(document.getElementById('cell-count').value),
+        ts_enabled: document.getElementById('ts-enabled').checked,
+        ts_auth_key: document.getElementById('ts-key').value.trim(),
+        ts_hostname: document.getElementById('ts-host').value.trim()
       };
 
       const btnSub = document.getElementById('btn-submit');
@@ -788,7 +840,29 @@ static const char SETUP_HTML[] PROGMEM = R"rawliteral(
       }
     };
 
+    async function loadCurrentConfig() {
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const cfg = await res.json();
+          if (cfg.ssid) document.getElementById('wifi-ssid').value = cfg.ssid;
+          if (cfg.mac) document.getElementById('bms-mac').value = cfg.mac;
+          if (cfg.pin) document.getElementById('bms-pin').value = cfg.pin;
+          if (cfg.cells) document.getElementById('cell-count').value = cfg.cells;
+          if (cfg.ts_enabled) {
+            document.getElementById('ts-enabled').checked = true;
+            document.getElementById('ts-fields').style.display = 'block';
+          }
+          if (cfg.ts_hostname) document.getElementById('ts-host').value = cfg.ts_hostname;
+          if (cfg.has_ts_key) {
+            document.getElementById('ts-key').placeholder = '●●●●●●●● (Saved / Збережено)';
+          }
+        }
+      } catch(e) {}
+    }
+
     setLang(currentLang);
+    loadCurrentConfig();
   </script>
 </body>
 </html>

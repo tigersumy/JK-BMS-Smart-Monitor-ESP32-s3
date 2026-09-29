@@ -1,0 +1,12 @@
+{
+  "name": "wireguard_lwip",
+  "version": "1.0.0",
+  "build": {
+    "flags": [
+      "-Isrc",
+      "-Isrc/crypto/refc",
+      "-DWIREGUARD_CRYPTO_REFC=1",
+      "-Wno-stringop-overread"
+    ]
+  }
+}
