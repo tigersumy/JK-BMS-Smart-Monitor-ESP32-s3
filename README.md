@@ -23,7 +23,7 @@
 - [Tailscale VPN Remote Access (ESP32-S3)](#-tailscale-vpn-remote-access-esp32-s3)
 - [REST API Specification](#-rest-api-specification)
 - [Getting Started](#-getting-started)
-  - [Prerequisites](#prerequisites)
+  - [Pre-compiled Firmware Binaries](#pre-compiled-firmware-binaries)
   - [Flashing via PlatformIO](#flashing-via-platformio)
   - [Initial Provisioning (Captive Portal)](#step-1-initial-provisioning-captive-portal)
   - [Normal Operation (LAN Dashboard)](#step-2-normal-operation-lan-dashboard)
@@ -214,12 +214,33 @@ All data and control endpoints communicate using lightweight JSON payloads:
 
 ## 🚀 Getting Started
 
-### Prerequisites
-- [Visual Studio Code](https://code.visualstudio.com/) + [PlatformIO IDE extension](https://platformio.org/platformio-ide)
-- Or PlatformIO Core CLI (`pio`).
+### Pre-compiled Firmware Binaries
+
+If you prefer not to compile from source, pre-built binary images are available on the [GitHub Releases page](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3/releases):
+
+| Firmware Flavor | Factory Image (`0x0000`) | App Only (`0x10000` / OTA) | Description |
+| :--- | :--- | :--- | :--- |
+| **ESP32-S3 + Tailscale VPN** ⭐ | [`jkbms_esp32s3_tailscale_firmware_factory.bin`](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3/releases/download/v1.0.0/jkbms_esp32s3_tailscale_firmware_factory.bin) | [`jkbms_esp32s3_tailscale_firmware.bin`](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3/releases/download/v1.0.0/jkbms_esp32s3_tailscale_firmware.bin) | **Recommended.** Built-in remote VPN access & 2MB PSRAM buffers. |
+| **ESP32-S3 (Standard)** | [`jkbms_esp32s3_firmware_factory.bin`](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3/releases/download/v1.0.0/jkbms_esp32s3_firmware_factory.bin) | [`jkbms_esp32s3_firmware.bin`](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3/releases/download/v1.0.0/jkbms_esp32s3_firmware.bin) | Standard LAN-only build without Tailscale client. |
+| **ESP32-C6 (Wi-Fi 6)** | [`jkbms_esp32c6_firmware_factory.bin`](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3/releases/download/v1.0.0/jkbms_esp32c6_firmware_factory.bin) | [`jkbms_esp32c6_firmware.bin`](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3/releases/download/v1.0.0/jkbms_esp32c6_firmware.bin) | RISC-V 160 MHz + Wi-Fi 6 target. |
+
+#### Quick Flashing:
+- **Web Browser (Easiest):** Open [ESP Web Tools](https://espressif.github.io/esptool-js/) in Google Chrome or Microsoft Edge, plug in the board via USB-C, and flash the factory binary at offset `0x0000`.
+- **Using `esptool.py` CLI:**
+  ```bash
+  # Flash ESP32-S3 with Tailscale VPN:
+  esptool.py -b 921600 write_flash 0x0 jkbms_esp32s3_tailscale_firmware_factory.bin
+  ```
+
+---
 
 ### Flashing via PlatformIO
 
+#### Prerequisites
+- [Visual Studio Code](https://code.visualstudio.com/) + [PlatformIO IDE extension](https://platformio.org/platformio-ide)
+- Or PlatformIO Core CLI (`pio`).
+
+#### Build and Upload:
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3.git
@@ -237,9 +258,6 @@ All data and control endpoints communicate using lightweight JSON payloads:
    ```bash
    pio device monitor
    ```
-
-> [!IMPORTANT]
-> **Flash Mode Notice:** The embedded Flash memory on ESP32-S3 Super Mini requires **`DIO` mode** (`board_build.flash_mode = dio`) and standard 4MB partitions (`partitions = default.csv`). Setting `qio` will cause bootloader crash loops.
 
 ---
 
