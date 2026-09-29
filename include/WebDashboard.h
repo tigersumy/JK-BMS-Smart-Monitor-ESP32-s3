@@ -649,7 +649,7 @@ static const char SETUP_HTML[] PROGMEM = R"rawliteral(
         btn_save: "💾 Save & Connect",
         btn_saving: "Saving...",
         btn_scanning: "⏳ Scanning...",
-        alert_saved: "✅ Configuration saved! ESP32-S3 is rebooting and connecting to your Wi-Fi. Open http://jkbms.local"
+        alert_saved: "✅ Configuration saved! Device is rebooting and connecting to your Wi-Fi. Access dashboard at: http://jkbms.local"
       },
       uk: {
         setup_title: "⚡ Налаштування JK-BMS Адаптера",
@@ -673,7 +673,7 @@ static const char SETUP_HTML[] PROGMEM = R"rawliteral(
         btn_save: "💾 Зберегти та підключитися",
         btn_saving: "Збереження...",
         btn_scanning: "⏳ Пошук...",
-        alert_saved: "✅ Налаштування збережено! ESP32-S3 перезавантажується та підключається до вашого Wi-Fi. Перейдіть за адресою http://jkbms.local"
+        alert_saved: "✅ Налаштування збережено! Пристрій перезавантажується та підключається до вашого Wi-Fi. Перейдіть за адресою: http://jkbms.local"
       }
     };
 

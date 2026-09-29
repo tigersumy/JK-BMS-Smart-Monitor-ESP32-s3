@@ -396,8 +396,7 @@ std::vector<BleDiscoveredDevice> JkBleClient::scanForBms(uint32_t durationSec) {
     
     Serial.println("[BLE] Starting BLE scan for JK-BMS...");
 #if defined(CONFIG_IDF_TARGET_ESP32C6) || (defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5)
-    pScan->start(durationSec, false);
-    NimBLEScanResults scanResults = pScan->getResults();
+    NimBLEScanResults scanResults = pScan->getResults(durationSec * 1000, false);
     for (int i = 0; i < scanResults.getCount(); i++) {
         const NimBLEAdvertisedDevice* dev = scanResults.getDevice(i);
         if (!dev) continue;
@@ -405,10 +404,10 @@ std::vector<BleDiscoveredDevice> JkBleClient::scanForBms(uint32_t durationSec) {
         String mac = dev->getAddress().toString().c_str();
         int rssi = dev->getRSSI();
 
-        // Check if name contains JK or service UUID is present
-        if (name.indexOf("JK") >= 0 || name.indexOf("BMS") >= 0 || dev->isAdvertisingService(NimBLEUUID("ffe0"))) {
+        // Check if name contains JK or service UUID 0xFFE0 is advertised
+        if (name.indexOf("JK") >= 0 || name.indexOf("BMS") >= 0 || dev->isAdvertisingService(NimBLEUUID("ffe0")) || dev->isAdvertisingService(NimBLEUUID((uint16_t)0xffe0))) {
             BleDiscoveredDevice item;
-            item.name = name.length() > 0 ? name : "JK-BMS Unknown";
+            item.name = name.length() > 0 ? name : "JK-BMS";
             item.mac = mac;
             item.rssi = rssi;
             results.push_back(item);
