@@ -217,13 +217,43 @@ std::vector<uint8_t> JkBleClient::buildFrame(uint8_t address, uint32_t value, ui
 }
 
 bool JkBleClient::setSwitch(uint8_t reg, bool state) {
-    if (!isConnected() || !pCharWrite_) {
+    if (!isConnected()) {
+        Serial.println("[BLE] setSwitch failed: not connected");
         return false;
     }
     uint32_t val = state ? 1 : 0;
     auto frame = buildFrame(reg, val, 4);
     Serial.printf("[BLE] Setting register %u to %d\n", reg, state ? 1 : 0);
-    return pCharWrite_->writeValue(frame.data(), frame.size(), false);
+
+    bool ok = false;
+    // Primary JK02 command channel: 0xFFE1 (pCharNotify_)
+    NimBLERemoteCharacteristic* target = pCharNotify_;
+    if (!target || (!target->canWrite() && !target->canWriteNoResponse())) {
+        target = pCharWrite_;
+    }
+
+    if (target) {
+        if (target->canWriteNoResponse()) {
+            ok = target->writeValue(frame.data(), frame.size(), false);
+        } else if (target->canWrite()) {
+            ok = target->writeValue(frame.data(), frame.size(), true);
+        }
+        Serial.printf("[BLE] Written %u bytes to handle %d (uuid %s), status: %d\n",
+                      frame.size(), target->getHandle(), target->getUUID().toString().c_str(), ok);
+    }
+
+    // Fallback to pCharWrite_ (0xFFE2) if 0xFFE1 write failed
+    if (!ok && pCharWrite_ && pCharWrite_ != target) {
+        ok = pCharWrite_->writeValue(frame.data(), frame.size(), false);
+        Serial.printf("[BLE] Fallback write to handle %d, status: %d\n", pCharWrite_->getHandle(), ok);
+    }
+
+    if (ok) {
+        if (reg == JK02_REG_CHARGE_SWITCH) telemetry_.switch_charging = state;
+        else if (reg == JK02_REG_DISCHARGE_SWITCH) telemetry_.switch_discharging = state;
+        else if (reg == JK02_REG_BALANCER_SWITCH) telemetry_.switch_balancer = state;
+    }
+    return ok;
 }
 
 void JkBleClient::sendCellInfoRequest() {
@@ -363,6 +393,12 @@ void JkBleClient::decodeCellInfo(const std::vector<uint8_t>& data) {
     uint32_t errs = get32(134 + offset);
     telemetry_.raw_errors = errs;
     telemetry_.errors_str = (errs == 0) ? "OK (Без помилок)" : ("0x" + String(errs, HEX));
+
+    // Real-time switch states from live cell info frame
+    if (167 + offset < data.size()) {
+        telemetry_.switch_charging    = (data[166 + offset] != 0);
+        telemetry_.switch_discharging = (data[167 + offset] != 0);
+    }
 
     telemetry_.last_update = millis();
 
