@@ -178,6 +178,7 @@ All data and control endpoints communicate using lightweight JSON payloads:
 | `GET` | `/api/scan-ble` | Scan Bluetooth air for JK-BMS | `[{"name":"JK-BMS","mac":"...","rssi":-62}]` |
 | `POST`| `/api/save-config`| Save credentials & reboot | `{"ssid":"...","pass":"...","mac":"...","cells":4}` |
 | `POST`| `/api/reset-wifi` | Wipe NVS and reboot to AP | - |
+| `POST`| `/update` | Web OTA multipart firmware binary upload | `multipart/form-data ("firmware")` |
 
 ### Sample Telemetry Response (`GET /api/data`):
 ```json
@@ -230,6 +231,12 @@ If you prefer not to compile from source, pre-built binary images are available 
   ```bash
   # Flash ESP32-S3 with Tailscale VPN:
   esptool.py -b 921600 write_flash 0x0 jkbms_esp32s3_tailscale_firmware_factory.bin
+  ```
+- **Web OTA over Network (No USB cable needed for already running devices):**
+  ```bash
+  curl -F "firmware=@jkbms_esp32s3_tailscale_firmware.bin" http://jkbms.local/update
+  # or via Tailscale IP / MagicDNS:
+  curl -F "firmware=@jkbms_esp32s3_tailscale_firmware.bin" http://jkbms-esp32.your-tailnet.ts.net/update
   ```
 
 ---
@@ -298,7 +305,8 @@ To ensure continuous, cool, 24/7 standalone operation:
 
 The ESP32-S3 firmware includes an embedded Tailscale VPN client based on [MicroLink](https://github.com/CamM2325/microlink) and WireGuard lwIP:
 - **Zero-Configuration NAT Traversal:** Connects to your Tailscale network (*tailnet*) over standard Wi-Fi, establishing direct encrypted P2P WireGuard sessions (or fallback via DERP relay).
-- **Direct Remote Access:** Allows opening the dashboard and querying the REST API from anywhere in the world using the device's Tailscale IP (e.g. `http://100.123.22.43/` or `http://jkbms-esp32/`).
+- **Direct Remote Access & MagicDNS:** Allows opening the dashboard and querying the REST API from anywhere in the world using MagicDNS (e.g. `http://jkbms-esp32.your-tailnet.ts.net/`) or direct Tailscale IP (e.g. `http://100.x.y.z/`).
+- **Large Tailnet Support (Up to 32 Peers):** Supports up to 32 simultaneous peers in your tailnet (`CONFIG_ML_MAX_PEERS=32` and `WIREGUARD_MAX_PEERS=32`), preventing peer dropouts on busy networks.
 - **Memory Efficient:** Large buffers (HTTP/2, JSON tree, WireGuard state) are dynamically allocated in the 2 MB PSRAM, preserving internal SRAM.
 - **Easy Provisioning:** Tailscale Auth Key and hostname can be entered directly from the `/setup` captive portal or configuration page.
 
