@@ -629,19 +629,19 @@ struct wireguard_peer *wireguard_process_initiation_message(struct wireguard_dev
 						ret_peer = peer;
 
 					} else {
-						// Ignore
+						printf("[WG] Initiation dropped: replay=%d, rate_limit=%d\n", (int)replay, (int)rate_limit);
 					}
 				} else {
-					// Failed to decrypt
+					printf("[WG] Initiation failed: decrypt timestamp error\n");
 				}
 			} else {
-				// peer not found
+				printf("[WG] Initiation failed: peer not found by pubkey!\n");
 			}
 		} else {
-			// Failed to decrypt
+			printf("[WG] Initiation failed: decrypt static pubkey error\n");
 		}
 	} else {
-		// Bad X25519
+		printf("[WG] Initiation failed: bad X25519 DH calculation\n");
 	}
 
 	crypto_zero(key, sizeof(key));

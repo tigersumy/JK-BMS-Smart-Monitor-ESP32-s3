@@ -4,6 +4,7 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
+#include <Update.h>
 
 #include "Config.h"
 #include "JkBmsProtocol.h"
@@ -12,6 +13,7 @@
 
 #if ENABLE_TAILSCALE
 #include "microlink.h"
+#include "microlink_internal.h"
 #endif
 
 // Hardware Pin for BOOT button (ESP32-C6 uses GPIO 9; ESP32-S3 uses GPIO 0)
@@ -74,7 +76,7 @@ void startTailscaleClient() {
         .enable_derp = true,
         .enable_stun = true,
         .enable_disco = true,
-        .max_peers = 16,
+        .max_peers = 32,
         .wifi_tx_power_dbm = 13,
         .priority_peer_ip = 0,
         .disco_heartbeat_ms = 0,
@@ -177,6 +179,23 @@ void setupWebServerRoutes() {
         doc["ts_connected"] = (tsState == ML_STATE_CONNECTED);
         doc["ts_ip"] = tsVpnIpStr;
         doc["ts_status"] = tsStatusStr;
+        if (mlHandle) {
+            doc["ts_derp_conn"] = mlHandle->derp.connected;
+            doc["ts_peer_cnt"] = mlHandle->peer_count;
+            doc["ts_derp_region"] = mlHandle->derp_home_region;
+            JsonArray peers_arr = doc["ts_peers"].to<JsonArray>();
+            for (int i = 0; i < mlHandle->peer_count && i < ML_MAX_PEERS; i++) {
+                if (mlHandle->peers[i].active) {
+                    char pip[16];
+                    microlink_ip_to_str(mlHandle->peers[i].vpn_ip, pip);
+                    JsonObject po = peers_arr.add<JsonObject>();
+                    po["host"] = mlHandle->peers[i].hostname;
+                    po["ip"] = pip;
+                    po["direct"] = mlHandle->peers[i].has_direct_path;
+                    po["wg_idx"] = mlHandle->peers[i].wg_peer_index;
+                }
+            }
+        }
 #else
         doc["ts_enabled"] = false;
         doc["ts_connected"] = false;
@@ -338,6 +357,32 @@ void setupWebServerRoutes() {
             Serial.printf("[CONFIG] Cell count updated to %dS\n", count);
         } else {
             server.send(400, "application/json", "{\"error\":\"Invalid cell count (4, 8, or 16)\"}");
+        }
+    });
+
+    // Web OTA update endpoint (firmware flashing over network)
+    server.on("/update", HTTP_POST, []() {
+        server.sendHeader("Connection", "close");
+        server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+        delay(500);
+        ESP.restart();
+    }, []() {
+        HTTPUpload& upload = server.upload();
+        if (upload.status == UPLOAD_FILE_START) {
+            Serial.printf("[OTA] Update Start: %s\n", upload.filename.c_str());
+            if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                Update.printError(Serial);
+            }
+        } else if (upload.status == UPLOAD_FILE_WRITE) {
+            if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+                Update.printError(Serial);
+            }
+        } else if (upload.status == UPLOAD_FILE_END) {
+            if (Update.end(true)) {
+                Serial.printf("[OTA] Success: %u bytes\n", upload.totalSize);
+            } else {
+                Update.printError(Serial);
+            }
         }
     });
 

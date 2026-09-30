@@ -9,7 +9,7 @@
       "-Iinclude",
       "-Isrc",
       "-I../wireguard_lwip/src",
-      "-DCONFIG_ML_MAX_PEERS=16",
+      "-DCONFIG_ML_MAX_PEERS=32",
       "-DCONFIG_ML_NVS_MAX_PEERS=64",
       "-DCONFIG_ML_H2_BUFFER_SIZE_KB=256",
       "-DCONFIG_ML_JSON_BUFFER_SIZE_KB=256"
