@@ -101,6 +101,25 @@ void startTailscaleClient() {
         tsStatusStr = "CONNECTING";
     }
 }
+
+void stopTailscaleClient() {
+    if (mlHandle != nullptr) {
+        Serial.println("[TAILSCALE] Stopping and cleaning up MicroLink client...");
+        microlink_destroy(mlHandle);
+        mlHandle = nullptr;
+        tsState = ML_STATE_IDLE;
+        tsStatusStr = "STOPPED";
+        tsVpnIpStr = "";
+        Serial.println("[TAILSCALE] MicroLink client stopped.");
+    }
+}
+
+void restartTailscaleClient() {
+    Serial.println("[TAILSCALE] Soft-restarting Tailscale client...");
+    stopTailscaleClient();
+    delay(500);
+    startTailscaleClient();
+}
 #endif
 
 // Captive Portal detection
@@ -394,6 +413,23 @@ void setupWebServerRoutes() {
         ESP.restart();
     });
 
+    // Soft-restart Tailscale client on demand
+    server.on("/api/restart-tailscale", HTTP_POST, []() {
+#if ENABLE_TAILSCALE
+        server.send(200, "application/json", "{\"status\":\"restarting\"}");
+        restartTailscaleClient();
+#else
+        server.send(400, "application/json", "{\"error\":\"Tailscale not enabled\"}");
+#endif
+    });
+
+    // Soft reboot system on demand
+    server.on("/api/reboot", HTTP_POST, []() {
+        server.send(200, "application/json", "{\"status\":\"rebooting\"}");
+        delay(500);
+        ESP.restart();
+    });
+
     // Captive Portal probe catch-all
     server.onNotFound([]() {
         if (isCaptivePortalRequest()) {
@@ -514,6 +550,28 @@ void loop() {
 
     server.handleClient();
     bleClient.loop();
+
+#if ENABLE_TAILSCALE
+    // Watchdog: If Tailscale is enabled, Wi-Fi is connected, but DERP is disconnected for > 360 seconds (360,000 ms)
+    static uint32_t derpDisconnectedStartMs = 0;
+    if (currentConfig.ts_enabled && WiFi.status() == WL_CONNECTED && mlHandle != nullptr) {
+        bool derpOk = mlHandle->derp.connected;
+        if (derpOk) {
+            derpDisconnectedStartMs = 0; // Reset watchdog timer when DERP is connected
+        } else {
+            if (derpDisconnectedStartMs == 0) {
+                derpDisconnectedStartMs = millis();
+            } else if (millis() - derpDisconnectedStartMs >= 360000) { // 360 seconds
+                Serial.printf("[TAILSCALE] Watchdog alert: DERP disconnected for %u ms (> 360s)! Initiating soft restart...\n",
+                              millis() - derpDisconnectedStartMs);
+                derpDisconnectedStartMs = millis(); // Reset timer to prevent rapid triggers
+                restartTailscaleClient();
+            }
+        }
+    } else {
+        derpDisconnectedStartMs = 0;
+    }
+#endif
 
     static uint32_t lastHb = 0;
     if (millis() - lastHb > 60000) {

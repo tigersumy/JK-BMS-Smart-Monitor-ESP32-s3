@@ -491,6 +491,7 @@ void ml_derp_tx_task(void *arg) {
     uint32_t loop_count = 0;
     uint64_t last_heartbeat_ms = 0;
     uint64_t connected_since_ms = 0;
+    uint64_t last_derp_retry_ms = 0;
     bool verbose_phase = false;  /* verbose logging for first 15s after connect */
 
     while (!(xEventGroupGetBits(ml->events) & ML_EVT_SHUTDOWN_REQUEST)) {
@@ -523,6 +524,7 @@ void ml_derp_tx_task(void *arg) {
             EventBits_t bits = xEventGroupGetBits(ml->events);
             if ((bits & ML_EVT_DERP_CONNECT_REQ) && !ml->derp.connected) {
                 xEventGroupClearBits(ml->events, ML_EVT_DERP_CONNECT_REQ);
+                last_derp_retry_ms = ml_get_time_ms();
                 /* Retry up to 3 times with 2s backoff */
                 for (int attempt = 0; attempt < 3 && !ml->derp.connected; attempt++) {
                     if (attempt > 0) {
@@ -533,6 +535,7 @@ void ml_derp_tx_task(void *arg) {
                     }
                     if (ml_derp_connect(ml) == ESP_OK) {
                         connected_since_ms = ml_get_time_ms();
+                        last_derp_retry_ms = connected_since_ms;
                         verbose_phase = true;
                         break;
                     }
@@ -541,6 +544,7 @@ void ml_derp_tx_task(void *arg) {
             }
             if (bits & ML_EVT_DERP_RECONNECT) {
                 xEventGroupClearBits(ml->events, ML_EVT_DERP_RECONNECT);
+                last_derp_retry_ms = ml_get_time_ms();
                 ESP_LOGW(TAG, "DERP reconnect requested (was %s)",
                          ml->derp.connected ? "connected" : "disconnected");
                 ml_derp_disconnect(ml);
@@ -554,6 +558,7 @@ void ml_derp_tx_task(void *arg) {
                     }
                     if (ml_derp_connect(ml) == ESP_OK) {
                         connected_since_ms = ml_get_time_ms();
+                        last_derp_retry_ms = connected_since_ms;
                         verbose_phase = true;
                         break;
                     }
@@ -568,6 +573,20 @@ void ml_derp_tx_task(void *arg) {
         }
 
         if (!ml->derp.connected) {
+            uint64_t now_ms = loop_start;
+            /* Auto-retry DERP connection every 120 seconds if disconnected */
+            if (now_ms - last_derp_retry_ms >= 120000) {
+                last_derp_retry_ms = now_ms;
+                ESP_LOGW(TAG, "DERP periodic auto-reconnect attempt (every 120s)...");
+                ml_derp_disconnect(ml);
+                if (ml_derp_connect(ml) == ESP_OK) {
+                    connected_since_ms = now_ms;
+                    verbose_phase = true;
+                    ESP_LOGI(TAG, "DERP periodic reconnect succeeded!");
+                } else {
+                    ESP_LOGW(TAG, "DERP periodic reconnect failed, will retry in 120s");
+                }
+            }
             /* Not connected - just wait and check again */
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
