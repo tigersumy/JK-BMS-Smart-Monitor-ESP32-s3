@@ -1,5 +1,29 @@
 # ⚡ JK-BMS Smart Monitor & BLE-to-Wi-Fi Adapter (ESP32-S3 & ESP32-C6)
 
+> [!WARNING]
+> ### 📦 Цей репозиторій заархівовано (Archived & Deprecated)
+> **Увага:** Цей проєкт підтримував виключно протокол JK-BMS і більше активно не підтримується.
+> 
+> 🚀 **Уся подальша розробка, нові функції та мультипротокольна підтримка перенесені до актуального проєкту:**
+> 👉 **[Universal-BMS-Remote-Diagnostic-Monitor-ESP32-S3](https://github.com/tigersumy/Universal-BMS-Remote-Diagnostic-Monitor-ESP32-S3)**
+> 
+> **Флагманський проєкт включає:**
+> - Мультипротокольну підтримку 5-в-1: **JK-BMS**, **JBD / Xiaoxiang / PowerQueen / Overkill Solar**, **Daly Smart BMS**, **Ant BMS**, **Redodo / LiTime Monolithic BMS**.
+> - Автоматичне визначення підключеного типу BMS (Auto-Detect).
+> - Дистанційний захищений доступ з будь-якої точки світу через **Tailscale VPN** (без білих IP та port forwarding).
+> - Розширену діагностику, REST API, Home Assistant інтеграцію та сучасний темний адаптивний WebUI (UA / EN).
+> 
+> Рекомендуємо всім користувачам переходити на [Universal-BMS-Remote-Diagnostic-Monitor-ESP32-S3](https://github.com/tigersumy/Universal-BMS-Remote-Diagnostic-Monitor-ESP32-S3).
+
+> [!NOTE]
+> ### 📦 Repository Archived (Deprecated)
+> **Notice:** This repository was dedicated exclusively to JK-BMS and has been archived.
+> 
+> 🚀 **All active development, multi-protocol features, and updates have moved to:**
+> 👉 **[Universal-BMS-Remote-Diagnostic-Monitor-ESP32-S3](https://github.com/tigersumy/Universal-BMS-Remote-Diagnostic-Monitor-ESP32-S3)**
+> 
+> The new project offers 5-in-1 universal protocol support (JK, JBD, Daly, Ant, Redodo), automatic BMS protocol detection, Tailscale VPN remote access, Home Assistant integration, and an upgraded bilingual dashboard.
+
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Build%20Passed-orange?logo=platformio)](https://platformio.org/)
 [![Hardware](https://img.shields.io/badge/Hardware-ESP32--S3%20%7C%20ESP32--C6%20Super%20Mini-blue?logo=espressif)](https://www.espressif.com/)
 [![Protocol](https://img.shields.io/badge/BMS%20Protocol-JK02%20BLE-green)](https://github.com/tigersumy/JK-BMS-Smart-Monitor-ESP32-s3)
